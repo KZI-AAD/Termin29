@@ -1,270 +1,88 @@
 package rs.aleph.termin29;
 
-import java.io.IOException;
 
-import android.app.Activity;
-import android.content.Context;
+import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.hardware.Camera;
-import android.hardware.Camera.CameraInfo;
-import android.media.CamcorderProfile;
-import android.media.MediaRecorder;
+import android.net.Uri;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.content.FileProvider;
+import android.support.v7.app.AppCompatActivity;
 import android.view.View;
-import android.view.View.OnClickListener;
-import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.Toast;
+import android.widget.ImageView;
 
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
+public class MainActivity extends AppCompatActivity{
 
-public class MainActivity extends Activity {
-	private Camera mCamera;
-	private CameraPreview mPreview;
-	private MediaRecorder mediaRecorder;
-	private Button capture, switchCamera;
-	private Context myContext;
-	private LinearLayout cameraPreview;
-	private boolean cameraFront = false;
-	
-	@Override
-	protected void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_main);
-		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-		myContext = this;
-		initialize();
-	}
-	
-	private int findFrontFacingCamera() {
-		int cameraId = -1;
-		// Search for the front facing camera
-		
-		int numberOfCameras = Camera.getNumberOfCameras();
-		for (int i = 0; i < numberOfCameras; i++) {
-			CameraInfo info = new CameraInfo();
-			Camera.getCameraInfo(i, info);
-			if (info.facing == CameraInfo.CAMERA_FACING_FRONT) {
-				cameraId = i;
-				cameraFront = true;
-				break;
-			}
-		}
-		return cameraId;
-	}
+    private Button takePictureButton;
+    private ImageView imageView;
+    private Uri file;
 
-	private int findBackFacingCamera() {
-		int cameraId = -1;
-		// Search for the back facing camera
-		// get the number of cameras
-		int numberOfCameras = Camera.getNumberOfCameras();
-		// for every camera check
-		for (int i = 0; i < numberOfCameras; i++) {
-			CameraInfo info = new CameraInfo();
-			Camera.getCameraInfo(i, info);
-			if (info.facing == CameraInfo.CAMERA_FACING_BACK) {
-				cameraId = i;
-				cameraFront = false;
-				break;
-			}
-		}
-		return cameraId;
-	}
-	
-	public void onResume() {
-		super.onResume();
-		if (!hasCamera(myContext)) {
-			Toast toast = Toast.makeText(myContext, "Sorry, your phone does not have a camera!", Toast.LENGTH_LONG);
-			toast.show();
-			finish();
-		}
-		if (mCamera == null) {
-			// if the front facing camera does not exist
-			if (findFrontFacingCamera() < 0) {
-				Toast.makeText(this, "No front facing camera found.", Toast.LENGTH_LONG).show();
-				switchCamera.setVisibility(View.GONE);
-			}
-			mCamera = Camera.open(findFrontFacingCamera());
-			mPreview.refreshCamera(mCamera);
-		}
-	}
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-	public void initialize() {
-		cameraPreview = (LinearLayout) findViewById(R.id.camera_preview);
+        takePictureButton = (Button) findViewById(R.id.button_image);
+        imageView = (ImageView) findViewById(R.id.imageview);
 
-		mPreview = new CameraPreview(myContext, mCamera);
-		cameraPreview.addView(mPreview);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            takePictureButton.setEnabled(false);
+            ActivityCompat.requestPermissions(this, new String[] { Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE }, 0);
+        }
 
-		capture = (Button) findViewById(R.id.button_capture);
-		capture.setOnClickListener(captrureListener);
+    }
 
-		switchCamera = (Button) findViewById(R.id.button_ChangeCamera);
-		switchCamera.setOnClickListener(switchCameraListener);
-	}
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == 0) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                takePictureButton.setEnabled(true);
+            }
+        }
+    }
 
-	OnClickListener switchCameraListener = new OnClickListener() {
-		@Override
-		public void onClick(View v) {
-			// get the number of cameras
-			if (!recording) {
-				int camerasNumber = Camera.getNumberOfCameras();
-				if (camerasNumber > 1) {
-					// release the old camera instance
-					// switch camera, from the front and the back and vice versa
+    private static File getOutputMediaFile(){
+        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES), "CameraDemo");
 
-					releaseCamera();
-					chooseCamera();
-				} else {
-					Toast toast = Toast.makeText(myContext, "Sorry, your phone has only one camera!", Toast.LENGTH_LONG);
-					toast.show();
-				}
-			}
-		}
-	};
+        if (!mediaStorageDir.exists()){
+            if (!mediaStorageDir.mkdirs()){
+                return null;
+            }
+        }
 
-	public void chooseCamera() {
-		// if the camera preview is the front
-		if (cameraFront) {
-			int cameraId = findBackFacingCamera();
-			if (cameraId >= 0) {
-				// open the backFacingCamera
-				// set a picture callback
-				// refresh the preview
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        return new File(mediaStorageDir.getPath() + File.separator +
+                "IMG_"+ timeStamp + ".jpg");
+    }
 
-				mCamera = Camera.open(cameraId);
-				// mPicture = getPictureCallback();
-				mPreview.refreshCamera(mCamera);
-			}
-		} else {
-			int cameraId = findFrontFacingCamera();
-			if (cameraId >= 0) {
-				// open the backFacingCamera
-				// set a picture callback
-				// refresh the preview
+    public void takePicture(View view) {
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-				mCamera = Camera.open(cameraId);
-				// mPicture = getPictureCallback();
-				mPreview.refreshCamera(mCamera);
-			}
-		}
-	}
-	
-	@Override
-	protected void onPause() {
-		super.onPause();
-		// when on Pause, release camera in order to be used from other
-		// applications
-		releaseCamera();
-	}
+        file = FileProvider.getUriForFile(this, GenericFileProvider.MY_PROVIDER, getOutputMediaFile());
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, file);
 
-	private boolean hasCamera(Context context) {
-		// check if the device has camera
-		if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
-			return true;
-		} else {
-			return false;
-		}
-	}
+        startActivityForResult(intent, 100);
+    }
 
-	boolean recording = false;
-	OnClickListener captrureListener = new OnClickListener() {
-		@Override
-		public void onClick(View v) {
-			if (recording) {
-				// stop recording and release camera
-				mediaRecorder.stop(); // stop the recording
-				releaseMediaRecorder(); // release the MediaRecorder object
-				Toast.makeText(MainActivity.this, "Video captured!", Toast.LENGTH_LONG).show();
-				recording = false;
-			} else {
-				if (!prepareMediaRecorder()) {
-					Toast.makeText(MainActivity.this, "Fail in prepareMediaRecorder()!\n - Ended -", Toast.LENGTH_LONG).show();
-					finish();
-				}
-				// work on UiThread for better performance
-				runOnUiThread(new Runnable() {
-					public void run() {
-						// If there are stories, add them to the table
-
-						try {
-							mediaRecorder.start();
-						} catch (final Exception ex) {
-							// Log.i("---","Exception in thread");
-						}
-					}
-				});
-
-				recording = true;
-			}
-		}
-	};
-
-	private void releaseMediaRecorder() {
-		if (mediaRecorder != null) {
-			mediaRecorder.reset(); // clear recorder configuration
-			mediaRecorder.release(); // release the recorder object
-			mediaRecorder = null;
-			mCamera.lock(); // lock camera for later use
-		}
-	}
-
-	private boolean prepareMediaRecorder() {
-
-		mediaRecorder = new MediaRecorder();
-
-		mCamera.unlock();
-		mediaRecorder.setCamera(mCamera);
-
-		mediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-		mediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-
-		mediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_720P));
-
-		mediaRecorder.setOutputFile("/sdcard/myvideo.mp4");
-		mediaRecorder.setMaxDuration(600000); // Set max duration 60 sec.
-		mediaRecorder.setMaxFileSize(50000000); // Set max file size 50M
-
-		try {
-			mediaRecorder.prepare();
-		} catch (IllegalStateException e) {
-			releaseMediaRecorder();
-			return false;
-		} catch (IOException e) {
-			releaseMediaRecorder();
-			return false;
-		}
-		return true;
-
-	}
-
-	private void releaseCamera() {
-		// stop and release camera
-		if (mCamera != null) {
-			mCamera.release();
-			mCamera = null;
-		}
-	}
-
-
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater().inflate(R.menu.main, menu);
-		return true;
-	}
-
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		// Handle action bar item clicks here. The action bar will
-		// automatically handle clicks on the Home/Up button, so long
-		// as you specify a parent activity in AndroidManifest.xml.
-		int id = item.getItemId();
-		if (id == R.id.action_settings) {
-			return true;
-		}
-		return super.onOptionsItemSelected(item);
-	}
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == 100) {
+            if (resultCode == RESULT_OK) {
+                imageView.setImageURI(file);
+            }
+        }
+    }
 }
